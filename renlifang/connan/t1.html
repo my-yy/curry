@@ -254,9 +254,9 @@
             duration(animationTime)
                 .attr("transform", "translate("+ dcx + "," + dcy  + ")scale(" + myzoom.scale() + ")");
 
+            tooltipdiv.style("opacity", 0);
             if (standOutNode == d){//再次双击stand center，退出模式
                 standOutNode = null;
-
                 //让所有的颜色恢复正常
                 link.transition().ease("linear").duration(animationTime).style("opacity", 1);
                 node.transition().ease("linear").duration(animationTime).style("opacity", 1);
