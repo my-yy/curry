@@ -1,0 +1,392 @@
+<!--这个已经实现了居中效果-->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <title>Force Layout Example 3</title>
+    <style>
+
+        /*.node {*/
+            /*fill: #ccc;*/
+            /*stroke: #fff;*/
+            /*stroke-width: 1px;*/
+        /*}*/
+
+        .link {
+            stroke: #717574;
+            stroke-width: 1px;
+        }
+
+        button {
+            position: absolute;
+            width: 30px;
+        }
+        button#slow {
+            margin-left: 40px;
+        }
+
+
+        /*.node text {*/
+            /*pointer-events: none;*/
+            /*font: 10px sans-serif;*/
+        /*}*/
+
+
+        div.tooltip {
+            position: absolute;
+            text-align: center;
+            width: 60px;
+            height: 28px;
+            padding: 2px;
+            font: 8px sans-serif;
+            background: lightsteelblue;
+            border: 0px;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+
+
+
+    </style>
+</head>
+<body>
+
+
+<script src='res/d3.v3.min.js'></script>
+<script>
+
+
+    var width = document.body.scrollWidth,
+        height = document.body.scrollHeight;
+
+    console.log("width:"+width+",height:"+height);
+
+
+    var graph;
+
+    d3.json("res/graph.json",function (error, json) {
+       graph = json;
+
+
+
+        var svg = d3.select('body').append('svg')
+            .attr('width', width)
+            .attr('height', height).style("border", "1px solid black");
+
+        var g_container = svg.append("g");
+
+        var nodes = graph.nodes,
+            links = graph.links;
+
+
+        var length = nodes.length;
+
+
+        //生成矩阵
+        var matrix= new Array(length);
+        for(i=0;i<length;i++)
+        {
+            matrix[i]=new Array(length);
+            for(j=0;j<length;j++)
+            {
+                matrix[i][j]=0;
+            }
+            matrix[i][i]=1;
+        }
+
+        for(var i = 0, l = links.length; i < l; i++) {
+            var from = links[i].source;
+            var to  = links[i].target;
+            matrix[from][to] = 1;
+            matrix[to][from] = 1;
+        }
+
+
+
+
+
+        var force = d3.layout.force()
+            .size([width, height])
+            .nodes(nodes)
+            .links(links);
+
+        force.linkDistance(100);
+        force.linkStrength(0.3);
+        force.charge(-300);
+        force.gravity(0.08);
+
+        //=================================================================================生成内容：
+        var link = g_container.selectAll('.link')
+            .data(links)
+            .enter().append('line')
+            .attr('class', 'link')
+            .attr('x1', function(d) { return nodes[d.source].x; })
+            .attr('y1', function(d) { return nodes[d.source].y; })
+            .attr('x2', function(d) { return nodes[d.target].x; })
+            .attr('y2', function(d) { return nodes[d.target].y; })
+            .style("visibility","hidden");
+
+
+        var node = g_container.selectAll(".node")
+            .data(nodes)
+            .enter().append("g")
+            .attr("class", "node");
+
+        node.append("image")
+            .attr("xlink:href",function(d) { return d.icon })
+            .attr("x", -12)
+            .attr("y", -12)
+            .attr("width", 24)
+            .attr("height", 24);
+
+        node.append("text")
+            .attr("text-anchor","middle")
+            .attr("dy","0.8em")
+            .attr("dominant-baseline","text-before-edge")
+            .attr("style","font-size:10px")//文字尺寸
+            .text(function(d) { return d.name });
+
+
+
+
+
+
+        //线上文字
+        var textonline = g_container.selectAll(".textonline")
+            .data(links)
+            .enter().append("g")
+            .attr("class", "textonline").
+            append('text').
+            attr("dx", 0)//这样就离线条近了
+            .attr("dy", ".72em")
+            .attr("fill","#09c")//文字颜色
+            .attr("style","font-size:10px")//文字尺寸
+            .text(function(d) {return d.relation;});
+        textonline.style("visibility","hidden");
+
+
+        //Tooltip
+        var tooltipdiv = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+
+        node.on("mouseover", function(d,index) {
+            if (standOutNode == null){ //普通模式
+                showToolTip(d);
+                freshLinkVisibility(100,index);
+            }else{//santand out 模式
+                if (matrix[index][standOutNode.index]) {//仅仅显示 standout 的：
+                    showToolTip(d);
+                    freshLinkVisibility(100,index);
+                }
+            }
+        })
+            .on("mouseout", function(d) {
+                tooltipdiv.transition()
+                    .duration(500)
+                    .style("opacity", 0);
+
+                //stand out 模式 在移出时会去掉显示
+                if (standOutNode != null){
+                    freshLinkVisibility(100,-1);
+                }
+
+            });
+
+
+        function showToolTip(d){
+            tooltipdiv.transition()
+                .duration(500)
+                .style("opacity", .9);
+            tooltipdiv.html(d.tooltip)
+                .style("left", (d3.event.pageX) + "px")
+                .style("top", (d3.event.pageY - 28) + "px");
+        }
+
+
+        //=================================================================================事件：
+        var myzoom = d3.behavior.zoom().scaleExtent([1,4]) .on("zoom", handleZoom);
+        svg.call(myzoom);
+        function handleZoom() {
+            g_container.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+        }
+
+
+        force.on('tick', tick);
+
+        function tick() {
+            link.attr("x1", function(d) { return d.source.x; })
+                .attr("y1", function(d) { return d.source.y; })
+                .attr("x2", function(d) { return d.target.x; })
+                .attr("y2", function(d) { return d.target.y; });
+
+            node.attr("transform", function(d) {
+                return "translate(" + d.x + "," + d.y  + ")";
+            });
+
+
+            textonline.attr("transform", function(d) {
+                return "translate(" + (d.source.x+d.target.x)/2 + "," + (d.source.y+d.target.y)/2  + ")";
+            });
+
+        }
+
+
+
+        var speed = 1;
+
+        var standOutNode = null;
+        node.on("dblclick.zoom", function(d,index) {
+
+            d3.event.stopPropagation();//这个函数是用于取消 zoom（） 监听的
+            var dcx = (window.innerWidth/2-d.x*myzoom.scale());
+            var dcy = (window.innerHeight/2-d.y*myzoom.scale());
+
+            var animationTime = Math.sqrt(dcx*dcx + dcy*dcy)*speed;
+
+            console.log("time:"+animationTime+"\tlength:"+dcx);
+
+            myzoom.translate([dcx,dcy]);
+            g_container.
+            transition().
+            ease("quad").
+            duration(animationTime)
+                .attr("transform", "translate("+ dcx + "," + dcy  + ")scale(" + myzoom.scale() + ")");
+
+            if (standOutNode == d){//再次双击stand center，退出模式
+                standOutNode = null;
+
+                //让所有的颜色恢复正常
+                link.transition().ease("linear").duration(animationTime).style("opacity", 1);
+                node.transition().ease("linear").duration(animationTime).style("opacity", 1);
+                textonline.transition().ease("linear").duration(animationTime).style("opacity", 1);
+                //并且刷新显示，不显示任何
+                freshLinkVisibility(200,-1);
+            }else{
+                standOutNode = d;
+
+                freshStandOutAnimate(0,index);//我把它俩调换了位置，结果正常了-。-
+                freshLinkVisibility(0,index);
+            }
+
+        });
+
+
+        //显示 节点的 link及link标签
+        //并且standOut节点是一直被显示的
+        function freshLinkVisibility(animationTime,dbClickNodeIndex) {
+
+            var standOutIndex = (standOutNode==null) ? -1 : standOutNode.index;
+            console.log("standOutIndex:"+standOutIndex +"clickIndex:"+dbClickNodeIndex);
+            link.transition().ease("linear").duration(animationTime)
+                .style("visibility", function (d) {
+                    if ((d.source.index == standOutIndex)||(d.target.index == standOutIndex)){
+                        return "visible"
+                    }
+                    return  ((d.source.index == dbClickNodeIndex)||(d.target.index == dbClickNodeIndex)) ? "visible" : "hidden";
+                });
+
+            textonline.transition().ease("linear").duration(animationTime)
+                .style("visibility", function (d,i) {
+                    if ((d.source.index == standOutIndex)||(d.target.index == standOutIndex)){
+                        return "visible"
+                    }
+                    return   ((d.source.index == dbClickNodeIndex)||(d.target.index == dbClickNodeIndex)) ? "visible" : "hidden";
+                });
+        }
+
+        //突出显示 一个节点 以及与其相连的 边与点
+        function freshStandOutAnimate(animationTime,standOutNodeIndex) {
+            link.transition().ease("linear").duration(animationTime)
+                .style("opacity", function (d) {
+                    return  ((d.source.index == standOutNodeIndex)||(d.target.index == standOutNodeIndex)) ? 1 : 0.2;
+                });
+
+
+            node.transition().ease("linear").duration(animationTime)
+                .style("opacity", function (d,i) {
+                    return  matrix[i][standOutNodeIndex] == 1 ? 1 : 0.2;
+                });
+
+
+            textonline.transition().ease("linear").duration(animationTime)
+                .style("opacity", function (d) {
+                    return   ((d.source.index == standOutNodeIndex)||(d.target.index == standOutNodeIndex)) ? 1 : 0.2;
+                });
+
+        }
+
+
+
+
+
+
+        function freshPositionAnimate(animationTime,dbClickNodeIndex) {
+            link.transition().ease("linear").duration(animationTime)
+                .attr('x1', function(d) {return d.source.x;})
+                .attr('y1', function(d) { return d.source.y; })
+                .attr('x2', function(d) { return d.target.x; })
+                .attr('y2', function(d) { return d.target.y; })
+                .style("opacity", function (d) {
+//                    console.log(links[i].source);//也被替换成了对象啊，不是下标了
+                return  ((d.source.index == dbClickNodeIndex)||(d.target.index == dbClickNodeIndex)) ? 1 : 0.2;
+            });
+
+
+            node.transition().ease("linear").duration(animationTime)
+                .attr("transform", function(d) {
+                    return "translate(" + d.x + "," + d.y   + ")";
+                })
+                .style("opacity", function (d,i) {
+                return  matrix[i][dbClickNodeIndex] == 1 ? 1 : 0.2;
+            });
+
+
+            textonline.transition().ease("linear").duration(animationTime)
+                .attr("transform", function(d) {
+                    return "translate(" + (d.source.x+d.target.x)/2 + "," + (d.source.y+d.target.y)/2  + ")";
+                })
+                .style("opacity", function (d,i) {
+                return   ((d.source.index == dbClickNodeIndex)||(d.target.index == dbClickNodeIndex)) ? 1 : 0.2;
+            });
+
+        }
+
+
+        function freshPosition() {
+            link
+                .attr('x1', function(d) {return d.source.x;})
+                .attr('y1', function(d) { return d.source.y; })
+                .attr('x2', function(d) { return d.target.x; })
+                .attr('y2', function(d) { return d.target.y; });
+
+
+            node
+                .attr("transform", function(d) {
+                    return "translate(" + d.x + "," + d.y   + ")";
+                });
+
+
+            textonline
+                .attr("transform", function(d) {
+                    return "translate(" + (d.source.x+d.target.x)/2 + "," + (d.source.y+d.target.y)/2  + ")";
+                });
+        }
+
+
+
+
+        force.start();
+
+
+
+
+
+    });
+
+
+
+</script>
+</body>
+</html>
